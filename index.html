@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniSim 3D - 세상의 모든 상황 시뮬레이터</title>
+    <!-- Three.js & OrbitControls & GSAP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+            user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0b0f19;
+            color: #ffffff;
+        }
+
+        #webgl-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Top HUD Bar */
+        .hud-header {
+            position: absolute;
+            top: 20px;
+            left: 24px;
+            right: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            pointer-events: auto;
+            background: rgba(15, 23, 42, 0.75);
+            padding: 10px 18px;
+            border-radius: 14px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .brand-icon {
+            width: 34px;
+            height: 34px;
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        .brand-text h1 {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .brand-text p {
+            font-size: 11px;
+            color: #94a3b8;
+        }
+
+        .scenario-selector {
+            pointer-events: auto;
+            display: flex;
+            gap: 8px;
+            background: rgba(15, 23, 42, 0.75);
+            padding: 6px;
+            border-radius: 14px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .scenario-btn {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .scenario-btn.active {
+            background: #6366f1;
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+        }
+
+        .cam-controls {
+            pointer-events: auto;
+            display: flex;
+            gap: 6px;
+            background: rgba(15, 23, 42, 0.75);
+            padding: 6px;
+            border-radius: 14px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .cam-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .cam-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Live Tension / Persuasion Gauge Panel */
+        .status-panel {
+            position: absolute;
+            left: 24px;
+            top: 100px;
+            width: 250px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 16px;
+            z-index: 10;
+        }
+
+        .status-title {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .gauge-item {
+            margin-bottom: 12px;
+        }
+
+        .gauge-label {
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+
+        .gauge-bar-bg {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .gauge-bar-fill {
+            height: 100%;
+            width: 50%;
+            border-radius: 4px;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .fill-persuasion {
+            background: linear-gradient(90deg, #3b82f6, #10b981);
+        }
+
+        .fill-tension {
+            background: linear-gradient(90deg, #eab308, #ef4444);
+        }
+
+        .status-badge {
+            display: inline-block;
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+            margin-top: 4px;
+        }
+
+        /* Bottom Interaction Dock */
+        .interaction-dock {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(850px, calc(100% - 48px));
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* AI Dialogue Bubble */
+        .dialogue-box {
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 18px 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            position: relative;
+        }
+
+        .dialogue-speaker {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #818cf8;
+            margin-bottom: 6px;
+        }
+
+        .speaker-avatar {
+            width: 20px;
+            height: 20px;
+            background: #6366f1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: white;
+        }
+
+        .dialogue-text {
+            font-size: 15px;
+            line-height: 1.5;
+            color: #f8fafc;
+            min-height: 24px;
+        }
+
+        /* Quick choices or input box */
+        .input-bar {
+            display: flex;
+            gap: 10px;
+        }
+
+        .choice-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 4px;
+        }
+
+        .chip {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #cbd5e1;
+            padding: 8px 14px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            backdrop-filter: blur(8px);
+        }
+
+        .chip:hover {
+            background: rgba(99, 102, 241, 0.25);
+            border-color: #818cf8;
+            color: #ffffff;
+            transform: translateY(-2px);
+        }
+
+        .user-input-wrap {
+            display: flex;
+            flex: 1;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 16px;
+            padding: 6px 8px 6px 18px;
+            align-items: center;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .user-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 14px;
+            outline: none;
+            user-select: text;
+        }
+
+        .user-input::placeholder {
+            color: #64748b;
+        }
+
+        .action-btn {
+            background: #6366f1;
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 16px;
+        }
+
+        .action-btn:hover {
+            background: #4f46e5;
+            transform: scale(1.05);
+        }
+
+        .mic-btn {
+            background: rgba(255, 255, 255, 0.08);
+            margin-right: 6px;
+        }
+
+        .mic-btn.recording {
+            background: #ef4444;
+            animation: pulse 1.2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        /* 3D Label / Speech tag in World */
+        .avatar-thought {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #6366f1;
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            pointer-events: none;
+            transform: translate(-50%, -100%);
+            display: none;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D WebGL Canvas -->
+    <div id="webgl-container"></div>
+
+    <!-- HUD Header -->
+    <div class="hud-header">
+        <div class="brand">
+            <div class="brand-icon">🌐</div>
+            <div class="brand-text">
+                <h1>OmniSim 3D (세상 모든 시뮬레이션)</h1>
+                <p>상황 극복 & 결정장애 타파 가상 리허설 룸</p>
+            </div>
+        </div>
+
+        <!-- Scenario Mode Buttons -->
+        <div class="scenario-selector">
+            <button class="scenario-btn active" onclick="switchScenario('report')">💼 임원 보고</button>
+            <button class="scenario-btn" onclick="switchScenario('interview')">🎯 압박 면접</button>
+            <button class="scenario-btn" onclick="switchScenario('whatif')">⚖️ 결정장애 (이직/잔류)</button>
+        </div>
+
+        <!-- Camera Perspective Controls -->
+        <div class="cam-controls">
+            <button class="cam-btn" onclick="setCameraView('first')">1인칭 (내 시점)</button>
+            <button class="cam-btn" onclick="setCameraView('closeup')">상대 클로즈업</button>
+            <button class="cam-btn" onclick="setCameraView('orbit')">3인칭 자유 뷰</button>
+        </div>
+    </div>
+
+    <!-- Realtime Tension & Persuasion Gauge -->
+    <div class="status-panel">
+        <div class="status-title">
+            <span>실시간 분위기 분석</span>
+            <span id="charMoodIcon">🤨</span>
+        </div>
+        <div class="gauge-item">
+            <div class="gauge-label">
+                <span>상대방 설득도</span>
+                <span id="persuasionVal">45%</span>
+            </div>
+            <div class="gauge-bar-bg">
+                <div id="persuasionBar" class="gauge-bar-fill fill-persuasion" style="width: 45%;"></div>
+            </div>
+        </div>
+        <div class="gauge-item">
+            <div class="gauge-label">
+                <span>회의실 긴장도</span>
+                <span id="tensionVal">65%</span>
+            </div>
+            <div class="gauge-bar-bg">
+                <div id="tensionBar" class="gauge-bar-fill fill-tension" style="width: 65%;"></div>
+            </div>
+        </div>
+        <div class="status-badge" id="currentRoleDesc">상대: 보수적이고 깐깐한 김 상무</div>
+    </div>
+
+    <!-- Bottom Interaction Dock -->
+    <div class="interaction-dock">
+        <!-- AI Dialogue Box -->
+        <div class="dialogue-box">
+            <div class="dialogue-speaker">
+                <div class="speaker-avatar" id="speakerIcon">👔</div>
+                <span id="speakerName">김 상무 (AI 시뮬레이터)</span>
+            </div>
+            <div class="dialogue-text" id="dialogueText">
+                "자, 시간 없으니까 핵심만 말해봐요. 이번 분기 예산 30%를 늘려달라는데, ROI(투자대비수익)를 6개월 안에 증명할 수 있어요?"
+            </div>
+        </div>
+
+        <!-- Quick Choice Chips (Recommended Answers) -->
+        <div class="choice-chips" id="quickChoices">
+            <div class="chip" onclick="handleSelectChoice(0)">📊 "초기 3개월간 지표 검증 후 분할 집행하는 안전장치가 있습니다."</div>
+            <div class="chip" onclick="handleSelectChoice(1)">🎯 "경쟁사가 먼저 진입하고 있어 지금 놓치면 2배의 비용이 듭니다."</div>
+            <div class="chip" onclick="handleSelectChoice(2)">📉 "사실 확신은 어렵지만 꼭 시도해봐야 합니다..."</div>
+        </div>
+
+        <!-- User Input Bar -->
+        <div class="input-bar">
+            <div class="user-input-wrap">
+                <input type="text" id="userInput" class="user-input" placeholder="직접 음성이나 텍스트로 대답해 보세요..." onkeydown="if(event.key==='Enter') sendUserReply()">
+                <button class="action-btn mic-btn" id="micBtn" onclick="toggleSpeechRecognition()" title="음성 인식 (STT)">🎙️</button>
+                <button class="action-btn" onclick="sendUserReply()" title="전송">➔</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js Implementation Script -->
+    <script>
+        let scene, camera, renderer, controls;
+        let characterGroup, headMesh, eyeL, eyeR, projectorScreen;
+        let currentScenario = 'report';
+        let persuasionScore = 45;
+        let tensionScore = 65;
+
+        // Scenarios Data
+        const scenarios = {
+            report: {
+                role: "김 상무 (AI 시뮬레이터)",
+                desc: "상대: 보수적이고 깐깐한 김 상무",
+                icon: "👔",
+                initDialogue: "자, 시간 없으니까 핵심만 말해봐요. 이번 분기 예산 30%를 늘려달라는데, ROI(투자대비수익)를 6개월 안에 증명할 수 있어요?",
+                charColor: 0x1e293b,
+                ambientLightColor: 0x475569,
+                projectorContent: "2026 Q4 신규 사업 예산 타당성 검토",
+                choices: [
+                    { text: '📊 "초기 3개월간 지표 검증 후 분할 집행하는 안전장치가 있습니다."', pDelta: +25, tDelta: -20, reply: "흠, 리스크 헷지 방안이 있었군. 구체적인 3개월 마일스톤 기준이 뭡니까?", mood: "🧐" },
+                    { text: '🎯 "경쟁사가 먼저 진입하고 있어 지금 놓치면 2배의 비용이 듭니다."', pDelta: +10, tDelta: +10, reply: "경쟁사 따라가다 가랑이 찢어진 적이 한두 번인가? 우리만의 독점적 강점이 뭐요?", mood: "🤨" },
+                    { text: '📉 "사실 확신은 어렵지만 꼭 시도해봐야 합니다..."', pDelta: -30, tDelta: +30, reply: "자신도 확신 없는 사업에 회사 돈을 태우자고? 보고서 다시 써오세요.", mood: "😡" }
+                ]
+            },
+            interview: {
+                role: "수석 면접관 박 팀장",
+                desc: "상대: 날카로운 실무형 테크 면접관",
+                icon: "🎯",
+                initDialogue: "이력서에 대규모 트래픽 처리 경험이 있다고 쓰셨네요. 동시 접속자 10만 명이 몰릴 때 DB 병목이 생기면 어떻게 해결하시겠습니까?",
+                charColor: 0x0f172a,
+                ambientLightColor: 0x334155,
+                projectorContent: "Senior Engineer 기술 인터뷰 (Room 3)",
+                choices: [
+                    { text: '⚡ "Redis 캐시 레이어를 전면에 두고 Read Replica로 부하를 분산하겠습니다."', pDelta: +30, tDelta: -15, reply: "좋습니다. 만약 캐시 스탬피드(Cache Stampede) 현상이 발생하면 어떻게 대처할 건가요?", mood: "🙂" },
+                    { text: '🛠️ "우선 서버 스펙을 Scale-Up하여 버티도록 세팅하겠습니다."', pDelta: -10, tDelta: +15, reply: "비용 최적화 측면에서 너무 단순한 접근 아닐까요? 아키텍처적 개선은 없나요?", mood: "🤨" },
+                    { text: '💡 "비동기 메시지 큐(Kafka)를 도입해 인입 요청을 순차 버퍼링하겠습니다."', pDelta: +25, tDelta: -10, reply: "유실 방지 정책과 컨슈머 랙(Lag) 모니터링은 어떻게 설계하시겠습니까?", mood: "🧐" }
+                ]
+            },
+            whatif: {
+                role: "내면의 의사결정 시뮬레이터 (AI 코치)",
+                desc: "상황: 스타트업 이직 vs 대기업 잔류",
+                icon: "⚖️",
+                initDialogue: "이직 제안이 들어온 스타트업의 지분 옵션과, 현재 안정적인 직장의 승진 기회 사이에서 밤잠을 설치고 계시네요. 가장 두려운 게 무엇인가요?",
+                charColor: 0x312e81,
+                ambientLightColor: 0x4f46e5,
+                projectorContent: "What-If 의사결정 트리: [A: 스타트업] vs [B: 잔류]",
+                choices: [
+                    { text: '🚀 "실패하더라도 2년 동안 폭발적인 커리어 성장과 주도권을 원합니다."', pDelta: +30, tDelta: -25, reply: "커리어 자산 극대화 시나리오입니다. 18개월간의 런웨이(자금) 안전도를 먼저 확인하세요.", mood: "🌟" },
+                    { text: '🛡️ "아직 자녀 교육과 대출금 때문에 안정적인 현금 흐름이 절대적입니다."', pDelta: +20, tDelta: -20, reply: "리스크 회피 시나리오입니다. 현 직장에서 신규 TF 프로젝트로 변화를 모색해보는 절충안을 추천합니다.", mood: "🧘" },
+                    { text: '🌪️ "둘 다 불안해서 아무 결정을 못 내리겠어요..."', pDelta: -20, tDelta: +25, reply: "결정을 미루는 것 자체가 '현재에 강제 잔류'하는 최악의 선택일 수 있습니다. 우선순위 1가지를 정해봅시다.", mood: "🤔" }
+                ]
+            }
+        };
+
+        // Initialize Three.js Scene
+        function init3D() {
+            const container = document.getElementById('webgl-container');
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0e17);
+            scene.fog = new THREE.FogExp2(0x0a0e17, 0.04);
+
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+            camera.position.set(0, 1.6, 3.2); // First person / speaker position
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 + 0.05;
+            controls.target.set(0, 1.3, -0.6);
+
+            buildMeetingRoom();
+            buildInteractiveCharacter();
+            setupLighting();
+
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        // Room & Environment
+        function buildMeetingRoom() {
+            // Floor (Reflective wood/slate texture simulation)
+            const floorGeo = new THREE.PlaneGeometry(16, 16);
+            const floorMat = new THREE.MeshStandardMaterial({
+                color: 0x111827,
+                roughness: 0.35,
+                metalness: 0.25
+            });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Back Wall
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+            const backWall = new THREE.Mesh(new THREE.PlaneGeometry(16, 8), wallMat);
+            backWall.position.set(0, 4, -4);
+            backWall.receiveShadow = true;
+            scene.add(backWall);
+
+            // Meeting Table (Sleek modern boardroom table)
+            const tableGeo = new THREE.BoxGeometry(2.8, 0.08, 1.6);
+            const tableMat = new THREE.MeshStandardMaterial({
+                color: 0x334155,
+                roughness: 0.2,
+                metalness: 0.3
+            });
+            const table = new THREE.Mesh(tableGeo, tableMat);
+            table.position.set(0, 0.8, 0.2);
+            table.castShadow = true;
+            table.receiveShadow = true;
+            scene.add(table);
+
+            // Table Legs
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.2 });
+            const legGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.8, 16);
+            const legPositions = [
+                [-1.2, 0.4, 0.8], [1.2, 0.4, 0.8],
+                [-1.2, 0.4, -0.4], [1.2, 0.4, -0.4]
+            ];
+            legPositions.forEach(pos => {
+                const leg = new THREE.Mesh(legGeo, legMat);
+                leg.position.set(...pos);
+                leg.castShadow = true;
+                scene.add(leg);
+            });
+
+            // Projector Screen / Digital Canvas
+            const screenCanvas = document.createElement('canvas');
+            screenCanvas.width = 1024;
+            screenCanvas.height = 512;
+            const ctx = screenCanvas.getContext('2d');
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, 1024, 512);
+            ctx.fillStyle = '#6366f1';
+            ctx.fillRect(40, 40, 944, 432);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 36px Pretendard, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("OmniSim 3D Simulation Platform", 512, 160);
+            ctx.font = '24px Pretendard, sans-serif';
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText("2026 Strategic Business Rehearsal", 512, 230);
+
+            const screenTex = new THREE.CanvasTexture(screenCanvas);
+            const screenMat = new THREE.MeshBasicMaterial({ map: screenTex });
+            projectorScreen = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.8), screenMat);
+            projectorScreen.position.set(0, 2.5, -3.95);
+            scene.add(projectorScreen);
+            projectorScreen.userData = { canvas: screenCanvas, ctx: ctx, texture: screenTex };
+
+            // Desk Laptop & Coffee Cup Props
+            const laptop = new THREE.Mesh(
+                new THREE.BoxGeometry(0.35, 0.02, 0.25),
+                new THREE.MeshStandardMaterial({ color: 0x090d16, metalness: 0.9 })
+            );
+            laptop.position.set(0, 0.85, -0.15);
+            scene.add(laptop);
+
+            const cup = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.04, 0.03, 0.1, 16),
+                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1 })
+            );
+            cup.position.set(0.4, 0.89, -0.1);
+            scene.add(cup);
+        }
+
+        // 3D Avatar (Stylized expressive 3D character)
+        function buildInteractiveCharacter() {
+            characterGroup = new THREE.Group();
+
+            // Body / Suit
+            const suitGeo = new THREE.CylinderGeometry(0.3, 0.35, 0.9, 16);
+            const suitMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
+            const suit = new THREE.Mesh(suitGeo, suitMat);
+            suit.position.y = 0.95;
+            suit.castShadow = true;
+            characterGroup.add(suit);
+
+            // Neck
+            const neck = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.09, 0.1, 0.15, 16),
+                new THREE.MeshStandardMaterial({ color: 0xfbcfe8, roughness: 0.5 })
+            );
+            neck.position.y = 1.45;
+            characterGroup.add(neck);
+
+            // Head (With smooth animation pivot)
+            headMesh = new THREE.Group();
+            headMesh.position.set(0, 1.62, 0);
+
+            const headSphere = new THREE.Mesh(
+                new THREE.SphereGeometry(0.2, 32, 32),
+                new THREE.MeshStandardMaterial({ color: 0xfce7f3, roughness: 0.4 })
+            );
+            headMesh.add(headSphere);
+
+            // Hair
+            const hair = new THREE.Mesh(
+                new THREE.SphereGeometry(0.21, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.5),
+                new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 })
+            );
+            hair.position.y = 0.02;
+            hair.scale.set(1.02, 1.05, 1.05);
+            headMesh.add(hair);
+
+            // Glasses
+            const glassGeo = new THREE.TorusGeometry(0.05, 0.008, 8, 24);
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 0.9 });
+            const glassL = new THREE.Mesh(glassGeo, glassMat);
+            glassL.position.set(-0.07, 0.02, 0.19);
+            const glassR = new THREE.Mesh(glassGeo, glassMat);
+            glassR.position.set(0.07, 0.02, 0.19);
+            headMesh.add(glassL);
+            headMesh.add(glassR);
+
+            // Eyes (For looking/blinking effect)
+            const eyeGeo = new THREE.SphereGeometry(0.025, 16, 16);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+            eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeL.position.set(-0.07, 0.02, 0.185);
+            eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeR.position.set(0.07, 0.02, 0.185);
+            headMesh.add(eyeL);
+            headMesh.add(eyeR);
+
+            characterGroup.add(headMesh);
+
+            // Position behind table
+            characterGroup.position.set(0, 0, -0.6);
+            scene.add(characterGroup);
+
+            // Subtle idle breathing & looking animation
+            animateAvatarIdle();
+        }
+
+        function setupLighting() {
+            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            ambient.name = "ambientLight";
+            scene.add(ambient);
+
+            // Spotlight overhead on speaker & desk
+            const spotLight = new THREE.SpotLight(0x818cf8, 1.8);
+            spotLight.position.set(0, 4.5, 1.5);
+            spotLight.angle = Math.PI / 4;
+            spotLight.penumbra = 0.5;
+            spotLight.castShadow = true;
+            spotLight.shadow.mapSize.width = 2048;
+            spotLight.shadow.mapSize.height = 2048;
+            scene.add(spotLight);
+
+            // Warm rim light behind character for depth
+            const rimLight = new THREE.PointLight(0x38bdf8, 1.2, 8);
+            rimLight.position.set(0, 2.5, -2.5);
+            scene.add(rimLight);
+        }
+
+        // Avatar Animations via GSAP
+        function animateAvatarIdle() {
+            gsap.to(headMesh.rotation, {
+                y: 0.08,
+                duration: 3,
+                repeat: -1,
+                yoyo: true,
+                ease: "sine.inOut"
+            });
+
+            gsap.to(characterGroup.position, {
+                y: 0.015,
+                duration: 2.2,
+                repeat: -1,
+                yoyo: true,
+                ease: "sine.inOut"
+            });
+        }
+
+        // Reaction Animations
+        function triggerAvatarReaction(type) {
+            if (type === 'nod') {
+                // Agreeable nod
+                gsap.to(headMesh.rotation, {
+                    x: 0.25,
+                    duration: 0.35,
+                    repeat: 3,
+                    yoyo: true,
+                    ease: "power1.inOut",
+                    onComplete: () => { gsap.to(headMesh.rotation, { x: 0, duration: 0.4 }); }
+                });
+            } else if (type === 'shake') {
+                // Skeptical / Disagree shake
+                gsap.to(headMesh.rotation, {
+                    y: 0.35,
+                    duration: 0.25,
+                    repeat: 4,
+                    yoyo: true,
+                    ease: "power1.inOut",
+                    onComplete: () => { gsap.to(headMesh.rotation, { y: 0, duration: 0.4 }); }
+                });
+            } else if (type === 'lean') {
+                // Lean in with interest
+                gsap.to(characterGroup.position, {
+                    z: -0.45,
+                    y: 0.05,
+                    duration: 0.6,
+                    yoyo: true,
+                    repeat: 1,
+                    ease: "power2.out"
+                });
+            }
+        }
+
+        // Scenario Switching Logic
+        function switchScenario(scenarioKey) {
+            currentScenario = scenarioKey;
+            const data = scenarios[scenarioKey];
+
+            // Update UI buttons
+            document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update Header & Speaker
+            document.getElementById('speakerIcon').innerText = data.icon;
+            document.getElementById('speakerName').innerText = data.role;
+            document.getElementById('currentRoleDesc').innerText = data.desc;
+            document.getElementById('dialogueText').innerText = `"${data.initDialogue}"`;
+
+            // Reset Scores
+            persuasionScore = 50;
+            tensionScore = 50;
+            updateGauges();
+
+            // Update Choice Chips
+            renderChoiceChips(data.choices);
+
+            // Update Projector Screen in 3D
+            updateProjectorText(data.projectorContent);
+
+            // Camera subtle animation to refocus
+            setCameraView('first');
+            triggerAvatarReaction('lean');
+        }
+
+        function renderChoiceChips(choices) {
+            const container = document.getElementById('quickChoices');
+            container.innerHTML = '';
+            choices.forEach((c, idx) => {
+                const chip = document.createElement('div');
+                chip.className = 'chip';
+                chip.innerText = c.text;
+                chip.onclick = () => handleSelectChoice(idx);
+                container.appendChild(chip);
+            });
+        }
+
+        function updateProjectorText(title) {
+            if (!projectorScreen) return;
+            const canvas = projectorScreen.userData.canvas;
+            const ctx = projectorScreen.userData.ctx;
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(0, 0, 1024, 512);
+
+            // Gradient header
+            const grad = ctx.createLinearGradient(0, 0, 1024, 0);
+            grad.addColorStop(0, '#4f46e5');
+            grad.addColorStop(1, '#9333ea');
+            ctx.fillStyle = grad;
+            ctx.fillRect(40, 40, 944, 432);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 36px Pretendard, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(title, 512, 220);
+
+            ctx.font = '22px Pretendard, sans-serif';
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillText("OmniSim 3D Real-time Context Simulation", 512, 280);
+
+            projectorScreen.userData.texture.needsUpdate = true;
+        }
+
+        // Handle User Interaction
+        function handleSelectChoice(idx) {
+            const data = scenarios[currentScenario];
+            const choice = data.choices[idx];
+            if (!choice) return;
+
+            // Apply gauge deltas
+            persuasionScore = Math.min(100, Math.max(0, persuasionScore + choice.pDelta));
+            tensionScore = Math.min(100, Math.max(0, tensionScore + choice.tDelta));
+            updateGauges();
+
+            // Set mood icon & text
+            document.getElementById('charMoodIcon').innerText = choice.mood;
+            document.getElementById('dialogueText').innerText = `"${choice.reply}"`;
+
+            // Trigger 3D Avatar Motion
+            if (choice.pDelta > 0) {
+                triggerAvatarReaction('nod');
+                if (persuasionScore >= 80) {
+                    confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
+                }
+            } else {
+                triggerAvatarReaction('shake');
+            }
+        }
+
+        function sendUserReply() {
+            const input = document.getElementById('userInput');
+            const val = input.value.trim();
+            if (!val) return;
+
+            // Simple responsive evaluation logic for custom input
+            input.value = '';
+            document.getElementById('dialogueText').innerText = `"${val}"에 대해 곰곰이 생각 중입니다...`;
+            triggerAvatarReaction('lean');
+
+            setTimeout(() => {
+                let pChange = (val.length > 20) ? +20 : -10;
+                let tChange = (val.includes('데이터') || val.includes('근거') || val.includes('해결')) ? -15 : +15;
+                
+                persuasionScore = Math.min(100, Math.max(0, persuasionScore + pChange));
+                tensionScore = Math.min(100, Math.max(0, tensionScore + tChange));
+                updateGauges();
+
+                if (pChange > 0) {
+                    triggerAvatarReaction('nod');
+                    document.getElementById('dialogueText').innerText = `"논리적인 포인트가 있군요. 구체적인 실행 계획과 리스크 대책에 대해서도 추가로 말씀해 보시죠."`;
+                    document.getElementById('charMoodIcon').innerText = "🧐";
+                } else {
+                    triggerAvatarReaction('shake');
+                    document.getElementById('dialogueText').innerText = `"답변이 조금 두루뭉술합니다. 더 명확하고 수치화된 근거를 제시해 주시겠습니까?"`;
+                    document.getElementById('charMoodIcon').innerText = "🤨";
+                }
+            }, 1000);
+        }
+
+        function updateGauges() {
+            document.getElementById('persuasionVal').innerText = `${persuasionScore}%`;
+            document.getElementById('persuasionBar').style.width = `${persuasionScore}%`;
+            document.getElementById('tensionVal').innerText = `${tensionScore}%`;
+            document.getElementById('tensionBar').style.width = `${tensionScore}%`;
+        }
+
+        // Camera Views
+        function setCameraView(mode) {
+            if (mode === 'first') {
+                gsap.to(camera.position, { x: 0, y: 1.6, z: 3.2, duration: 1.2, ease: "power2.inOut" });
+                controls.target.set(0, 1.3, -0.6);
+            } else if (mode === 'closeup') {
+                gsap.to(camera.position, { x: 0, y: 1.65, z: 1.0, duration: 1.2, ease: "power2.inOut" });
+                controls.target.set(0, 1.6, -0.6);
+            } else if (mode === 'orbit') {
+                gsap.to(camera.position, { x: 3.2, y: 2.8, z: 3.8, duration: 1.5, ease: "power2.inOut" });
+                controls.target.set(0, 1.0, 0);
+            }
+        }
+
+        // Web Speech API (STT Voice Input)
+        let recognition = null;
+        let isRecording = false;
+
+        function toggleSpeechRecognition() {
+            const micBtn = document.getElementById('micBtn');
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                alert("이 브라우저는 음성 인식을 지원하지 않습니다. Chrome 브라우저를 추천합니다.");
+                return;
+            }
+
+            if (!recognition) {
+                recognition = new SpeechRecognition();
+                recognition.lang = 'ko-KR';
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                recognition.onstart = () => {
+                    isRecording = true;
+                    micBtn.classList.add('recording');
+                    micBtn.innerText = "🛑";
+                };
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    document.getElementById('userInput').value = transcript;
+                    sendUserReply();
+                };
+
+                recognition.onerror = (event) => {
+                    console.error("Speech Error:", event.error);
+                    stopRecording();
+                };
+
+                recognition.onend = () => {
+                    stopRecording();
+                };
+            }
+
+            if (!isRecording) {
+                recognition.start();
+            } else {
+                recognition.stop();
+                stopRecording();
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            const micBtn = document.getElementById('micBtn');
+            micBtn.classList.remove('recording');
+            micBtn.innerText = "🎙️";
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Boot
+        window.onload = () => {
+            init3D();
+            updateGauges();
+        };
+    </script>
+</body>
+</html>
+

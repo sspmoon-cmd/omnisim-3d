@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniSim 3D - 100명 군집 시뮬레이션 & 팩트 폭격 영수증 데모</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #070a12; color: #f8fafc; }
+        #canvas-wrap { position: absolute; inset: 0; z-index: 1; }
+
+        /* Left Control & 100 Agents Scoreboard */
+        .left-hud {
+            position: absolute; top: 20px; left: 20px; width: 340px; z-index: 10;
+            background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(14px);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; padding: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        .badge-free {
+            display: inline-block; background: rgba(16, 185, 129, 0.2); color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.4); font-size: 11px; font-weight: 700;
+            padding: 4px 10px; border-radius: 99px; margin-bottom: 10px;
+        }
+        .left-hud h2 { font-size: 17px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.4px; }
+        .left-hud p { font-size: 12px; color: #94a3b8; line-height: 1.45; margin-bottom: 14px; }
+
+        .slider-group { margin-bottom: 12px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #cbd5e1; }
+        .slider-label span:last-child { color: #818cf8; font-weight: 700; }
+        input[type=range] { width: 100%; accent-color: #6366f1; cursor: pointer; }
+
+        .sim-btn {
+            width: 100%; padding: 13px; border: none; border-radius: 12px;
+            background: linear-gradient(135deg, #6366f1, #a855f7); color: #fff;
+            font-size: 14px; font-weight: 800; cursor: pointer; transition: 0.2s;
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4); margin-top: 6px;
+        }
+        .sim-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(99, 102, 241, 0.6); }
+
+        .agent-stats {
+            margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .stat-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .dot-red { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .dot-yellow { background: #eab308; box-shadow: 0 0 8px #eab308; }
+        .dot-green { background: #10b981; box-shadow: 0 0 8px #10b981; }
+
+        /* Right HUD: 3D Karma Receipt (보완책 3 & 4) */
+        .receipt-modal {
+            position: absolute; top: 20px; right: 24px; width: 360px; z-index: 20;
+            perspective: 1000px; pointer-events: auto;
+        }
+        .receipt-slot {
+            width: 100%; height: 18px; background: linear-gradient(90deg, #78350f, #d97706, #78350f);
+            border-radius: 8px; border: 2px solid #f59e0b; box-shadow: 0 6px 20px rgba(0,0,0,0.8);
+            position: relative; z-index: 2;
+        }
+        .receipt-slot::after {
+            content: ''; position: absolute; left: 16px; right: 16px; top: 5px; height: 6px;
+            background: #000; border-radius: 3px;
+        }
+        .receipt-paper {
+            width: 92%; margin: -6px auto 0; background: #fffbeb; color: #1e293b;
+            padding: 22px 20px 18px; border-radius: 0 0 8px 8px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.75);
+            font-family: 'JetBrains Mono', monospace;
+            transform-origin: top center;
+            transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+            border-bottom: 4px dashed #cbd5e1;
+        }
+        .receipt-header {
+            text-align: center; border-bottom: 2px dashed #94a3b8; padding-bottom: 10px; margin-bottom: 12px;
+        }
+        .receipt-header h3 { font-size: 15px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; }
+        .receipt-header p { font-size: 11px; color: #64748b; margin-top: 2px; }
+        .r-line { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; font-weight: 600; }
+        .r-line.danger { color: #dc2626; font-weight: 800; }
+        .r-divider { border-top: 1px dashed #cbd5e1; margin: 10px 0; }
+        .roast-box {
+            background: #fef2f2; border-left: 4px solid #ef4444; padding: 10px;
+            font-size: 11.5px; color: #7f1d1d; line-height: 1.45; font-weight: 700; margin-bottom: 12px;
+        }
+        .affiliate-cta {
+            display: block; width: 100%; text-align: center; text-decoration: none;
+            background: #0f172a; color: #f8fafc; padding: 11px; border-radius: 8px;
+            font-size: 12px; font-weight: 800; margin-bottom: 8px; transition: 0.2s;
+            border: 1px solid #334155; cursor: pointer;
+        }
+        .affiliate-cta:hover { background: #1e293b; transform: scale(1.02); }
+        .affiliate-tag { font-size: 10px; color: #10b981; display: block; margin-top: 2px; }
+        .share-btns { display: flex; gap: 6px; }
+        .share-btn {
+            flex: 1; padding: 8px; border: 1px solid #cbd5e1; background: #ffffff;
+            color: #334155; font-size: 11px; font-weight: 700; border-radius: 6px; cursor: pointer;
+        }
+        .share-btn:hover { background: #f1f5f9; }
+    </style>
+</head>
+<body>
+    <div id="canvas-wrap"></div>
+
+    <!-- 보완책 1 & 2: 시그니처 3D 머신 + 100명 AI 에이전트 군집 시뮬레이션 -->
+    <div class="left-hud">
+        <div class="badge-free">⚡ API 비용 0원 (100% 브라우저 자체 연산)</div>
+        <h2>보완책 1·2: 100명 군집 3D 시뮬레이터</h2>
+        <p>방(Room)을 매번 새로 만들지 않고, 이 <b>시그니처 3D 투명 아레나</b> 안에서 100명의 가상 인간(구슬/피규어)이 10년 뒤 어떻게 되는지 실시간 물리/확률로 중계합니다.</p>
+
+        <div class="slider-group">
+            <div class="slider-label"><span>나의 월급 입력</span><span id="salVal">320만 원</span></div>
+            <input type="range" id="salSlider" min="200" max="800" step="10" value="320" oninput="updateSliders()">
+        </div>
+        <div class="slider-group">
+            <div class="slider-label"><span>주간 야식/충동소비 횟수</span><span id="habVal">주 3회</span></div>
+            <input type="range" id="habSlider" min="1" max="7" step="1" value="3" oninput="updateSliders()">
+        </div>
+
+        <button class="sim-btn" onclick="start100AgentSimulation()">🚀 100명 에이전트 10년 시뮬레이션 가동!</button>
+
+        <div class="agent-stats">
+            <div class="stat-row">
+                <span><i class="dot dot-red"></i>[A그룹 30명] 풀세트 본능형 (파멸존)</span>
+                <b id="statA">-3,740만 원</b>
+            </div>
+            <div class="stat-row">
+                <span><i class="dot dot-yellow"></i>[B그룹 40명] 어설픈 타협형 (제자리존)</span>
+                <b id="statB">-1,820만 원</b>
+            </div>
+            <div class="stat-row">
+                <span><i class="dot dot-green"></i>[C그룹 30명] 절제 & 투자형 (승리존)</span>
+                <b id="statC">+4,120만 원</b>
+            </div>
+        </div>
+    </div>
+
+    <!-- 보완책 3 & 4: 3D 팩트 폭격 영수증 (Karma Receipt) + 제휴 마케팅 직결 -->
+    <div class="receipt-modal">
+        <div class="receipt-slot"></div>
+        <div class="receipt-paper" id="receiptPaper">
+            <div class="receipt-header">
+                <h3>🧾 OMNI-SIM 3D 미래 영수증</h3>
+                <p>No. 2026-1107-A89 | 팩트 검증 완료</p>
+            </div>
+            <div class="r-line"><span>진단 항목:</span><span>밤 11시 야식 & 충동결제</span></div>
+            <div class="r-line"><span>입력 기준:</span><span id="rInputDesc">월 320만 / 주 3회 야식</span></div>
+            <div class="r-divider"></div>
+            <div class="r-line danger"><span>10년 증발 기회비용:</span><span id="rCost">-56,100,000 원</span></div>
+            <div class="r-line"><span>파괴된 깊은 수면:</span><span id="rSleep">-2,190 시간</span></div>
+            <div class="r-line"><span>렙틴 호르몬 교란:</span><span>-34.0% (하버드 의대)</span></div>
+            <div class="r-divider"></div>
+            <div class="roast-box" id="roastText">
+                💀 <b>AI 팩폭 진단:</b><br>
+                "치킨 대신 샐러드 시키고 새벽에 라면 끓여 먹는 당신! 10년 뒤 소나타 2대 값을 위장에 기부하셨습니다."
+            </div>
+
+            <!-- 보완책 4: 제휴 마케팅(Affiliate/CPA) 골든타임 버튼 -->
+            <div class="affiliate-cta" onclick="alert('쿠팡 파트너스 / 아마존 어필리에이트 / 금융 CPA 링크로 이동하여 즉시 수수료 수익이 발생합니다!')">
+                🍗 오늘 밤 치킨 대신! 칼로리 0kcal 야식 특가 보기 ➔
+                <span class="affiliate-tag">★ 제휴 수익(Affiliate) 발생 포인트 (구매액의 3~8% 정산)</span>
+            </div>
+
+            <div class="share-btns">
+                <button class="share-btn" onclick="printReceiptAnim()">🖨️ 영수증 다시 뽑기</button>
+                <button class="share-btn" onclick="alert('인스타 스토리 / 카카오톡 공유용 이미지가 클립보드에 저장되었습니다!')">📸 인스타/카톡 공유</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, controls;
+        let agents = [];
+        let simRunning = false;
+
+        function init3D() {
+            const container = document.getElementById('canvas-wrap');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x070a12);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 7.5, 9.5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 0.5, 0);
+
+            // Lights
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const spot = new THREE.SpotLight(0x818cf8, 2.2);
+            spot.position.set(4, 12, 6);
+            spot.castShadow = true;
+            scene.add(spot);
+
+            buildSignatureMachine();
+            spawn100Agents();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            animate();
+        }
+
+        // 보완책 1: 시그니처 3D 운명 판독기 (고정 틀)
+        function buildSignatureMachine() {
+            const group = new THREE.Group();
+
+            // Base Platform (Brushed Dark Metal + Brass Rim)
+            const base = new THREE.Mesh(
+                new THREE.CylinderGeometry(4.2, 4.5, 0.6, 64),
+                new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7, roughness: 0.3 })
+            );
+            base.receiveShadow = true;
+            group.add(base);
+
+            const brassRim = new THREE.Mesh(
+                new THREE.TorusGeometry(4.25, 0.12, 16, 64),
+                new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9, roughness: 0.2 })
+            );
+            brassRim.rotation.x = Math.PI / 2;
+            brassRim.position.y = 0.3;
+            group.add(brassRim);
+
+            // 3 Zones inside the Arena (Red / Yellow / Green)
+            const zoneColors = [0xef4444, 0xeab308, 0x10b981];
+            const zoneX = [-2.2, 0, 2.2];
+            zoneX.forEach((x, idx) => {
+                const pad = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.8, 0.15, 4.5),
+                    new THREE.MeshStandardMaterial({ color: zoneColors[idx], roughness: 0.4, metalness: 0.2, transparent: true, opacity: 0.35 })
+                );
+                pad.position.set(x, 0.38, 0);
+                group.add(pad);
+            });
+
+            // Transparent Acrylic Dome / Glass Wall
+            const glassWall = new THREE.Mesh(
+                new THREE.CylinderGeometry(4.2, 4.2, 2.5, 64, 1, true),
+                new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.15, roughness: 0.1, transmission: 0.85 })
+            );
+            glassWall.position.y = 1.5;
+            group.add(glassWall);
+
+            scene.add(group);
+        }
+
+        // 보완책 2: 100명의 가상 인간(AI 에이전트) 생성
+        function spawn100Agents() {
+            agents.forEach(a => scene.remove(a.mesh));
+            agents = [];
+
+            const geoHead = new THREE.SphereGeometry(0.11, 16, 16);
+            const geoBody = new THREE.CylinderGeometry(0.08, 0.12, 0.28, 12);
+
+            for (let i = 0; i < 100; i++) {
+                // 0~29: Red (A), 30~69: Yellow (B), 70~99: Green (C)
+                let groupType = i < 30 ? 'A' : (i < 70 ? 'B' : 'C');
+                let color = groupType === 'A' ? 0xef4444 : (groupType === 'B' ? 0xeab308 : 0x10b981);
+                let targetX = groupType === 'A' ? -2.2 : (groupType === 'B' ? 0 : 2.2);
+
+                const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.3, metalness: 0.3 });
+                const pawn = new THREE.Group();
+
+                const body = new THREE.Mesh(geoBody, mat);
+                body.position.y = 0.14;
+                const head = new THREE.Mesh(geoHead, mat);
+                head.position.y = 0.35;
+                pawn.add(body);
+                pawn.add(head);
+
+                // Initial random cluster
+                pawn.position.set(
+                    targetX + (Math.random() - 0.5) * 1.3,
+                    0.45,
+                    (Math.random() - 0.5) * 3.8
+                );
+
+                scene.add(pawn);
+                agents.push({
+                    mesh: pawn,
+                    group: groupType,
+                    baseX: pawn.position.x,
+                    baseZ: pawn.position.z,
+                    phase: Math.random() * Math.PI * 2
+                });
+            }
+        }
+
+        function start100AgentSimulation() {
+            simRunning = true;
+            // Animate 100 agents based on their destiny (Group A sinks/falls, Group B wobbles, Group C rises on golden pillars!)
+            agents.forEach((a, idx) => {
+                if (a.group === 'A') {
+                    // Impulse group falls down / collapses
+                    gsap.to(a.mesh.position, { y: 0.15, duration: 1.2, delay: Math.random() * 0.5, ease: "bounce.out" });
+                    gsap.to(a.mesh.rotation, { z: (Math.random() - 0.5) * 1.5, duration: 1.0 });
+                } else if (a.group === 'B') {
+                    // Compromise group runs in circles
+                    gsap.to(a.mesh.position, { y: 0.45, duration: 0.5 });
+                    gsap.to(a.mesh.rotation, { z: 0, duration: 0.5 });
+                } else if (a.group === 'C') {
+                    // Disciplined group rises up!
+                    gsap.to(a.mesh.position, { y: 1.2 + Math.random() * 0.8, duration: 1.4, delay: Math.random() * 0.5, ease: "back.out(1.7)" });
+                    gsap.to(a.mesh.rotation, { z: 0, duration: 0.5 });
+                }
+            });
+
+            printReceiptAnim();
+        }
+
+        function updateSliders() {
+            const sal = parseInt(document.getElementById('salSlider').value);
+            const hab = parseInt(document.getElementById('habSlider').value);
+            document.getElementById('salVal').innerText = `${sal}만 원`;
+            document.getElementById('habVal').innerText = `주 ${hab}회`;
+
+            const tenYearLoss = hab * 28000 * 52 * 10 * 1.38; // compound opportunity cost
+            const sleepLost = hab * 1.5 * 52 * 10;
+
+            document.getElementById('rInputDesc').innerText = `월 ${sal}만 / 주 ${hab}회 야식`;
+            document.getElementById('rCost').innerText = `-${Math.round(tenYearLoss).toLocaleString()} 원`;
+            document.getElementById('rSleep').innerText = `-${Math.round(sleepLost).toLocaleString()} 시간`;
+        }
+
+        function printReceiptAnim() {
+            const paper = document.getElementById('receiptPaper');
+            gsap.fromTo(paper,
+                { scaleY: 0.05, opacity: 0.3, y: -40 },
+                { scaleY: 1, opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }
+            );
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const t = performance.now() * 0.003;
+            agents.forEach(a => {
+                a.mesh.position.x = a.baseX + Math.sin(t + a.phase) * 0.06;
+                a.mesh.position.z = a.baseZ + Math.cos(t + a.phase) * 0.06;
+            });
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init3D;
+    </script>
+</body>
+</html>
+
